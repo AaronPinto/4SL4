@@ -1,14 +1,22 @@
 import numpy as np
 import pandas as pd
 from sklearn.datasets import load_boston
+from sklearn.linear_model import LinearRegression
 from sklearn.model_selection import KFold, train_test_split
+from sklearn.preprocessing import PolynomialFeatures
 
 
 def get_dataset_splits(dataset, rnd_seed):
+    """
+    Get training and testing splits from a given dataset
+
+    :param dataset:
+    :param rnd_seed:
+    :return:
+    """
     X = pd.DataFrame(dataset.data, columns=dataset.feature_names)
     y = dataset.target
 
-    # Do an initial split
     return train_test_split(X, y, test_size=0.2, random_state=rnd_seed)
 
 
@@ -53,45 +61,72 @@ def calculate_validation_error(coeffs: np.ndarray, x_valid: np.ndarray, t_valid:
     return validation_error
 
 
+def find_best_feature(kf, remaining_features, selected_features, X_train, y_train):
+    # Initialize cross-validation scores array to 0
+    cv_scores = dict.fromkeys(remaining_features.keys(), 0.0)
+
+    for feature_name in remaining_features.keys():
+        # Generate k-folds from training set with specific features (selected + current)
+        x_features = np.c_[np.ones(X_train.shape[0]), X_train[selected_features], X_train[feature_name]]
+
+        cross_valid_score = 0.0
+
+        # Run through all num K_FOLDS cross-validation
+        for train, test in kf.split(x_features):
+            x_train_mat, x_test_mat = x_features[train], x_features[test]
+            y_train_mat, y_test_mat = y_train[train], y_train[test]
+
+            coeffs = train_model(x_train_mat, y_train_mat)
+
+            cross_valid_score += calculate_validation_error(coeffs, x_test_mat, y_test_mat)
+
+        # Average final cross-validation error
+        cv_scores[feature_name] = cross_valid_score / kf.n_splits
+
+    # Find best feature, as the one with the lowest cross-validation error
+    best_feature = min(cv_scores, key=cv_scores.get)
+
+    return best_feature, cv_scores
+
+
+def create_polynomial_regression_model(degree, x_train, y_train):
+    """Creates a polynomial regression model for the given degree"""
+    poly_features = PolynomialFeatures(degree=degree, include_bias=True)
+
+    # transforms the existing features to higher degree features.
+    x_train_poly = poly_features.fit_transform(x_train)
+
+    # fit the transformed features to Linear Regression
+    poly_model = LinearRegression(fit_intercept=False)
+    poly_model.fit(x_train_poly, y_train)
+
+    return poly_features, poly_model
+
+
 def main():
     K_FOLDS = 5  # use 5 folds
     RANDOM_SEED = 637
     np.random.seed(RANDOM_SEED)  # student number is 400190637
 
     # Load dataset
-    boston_dataset = load_boston()
-    X_train, X_test, y_train, y_test = get_dataset_splits(boston_dataset, RANDOM_SEED)
+    dataset = load_boston()
+    X_train, X_test, y_train, y_test = get_dataset_splits(dataset, RANDOM_SEED)
 
     # Keep track of features
-    remaining_features = dict(zip(boston_dataset.feature_names, range(len(boston_dataset.feature_names))))
+    remaining_features = dict(zip(dataset.feature_names, range(len(dataset.feature_names))))
     selected_features = []
+
+    # Initialize K-Fold splitter
     kf = KFold(n_splits=K_FOLDS)
 
-    for k in range(1, len(boston_dataset.feature_names) + 1):
-        # Initialize cross-validation scores array to 0
-        scores = dict.fromkeys(remaining_features.keys(), 0.0)
+    for k in range(1, len(dataset.feature_names) + 1):
+        # Find the best feature to add to the selected set
+        best_feature, cv_scores = find_best_feature(kf, remaining_features, selected_features, X_train, y_train)
 
-        for feature_name in remaining_features.keys():
-            # Generate k-folds from training set with specific features (selected + current)
-            x_features = np.c_[np.ones(X_train.shape[0]), X_train[selected_features], X_train[feature_name]]
-
-            cross_valid_score = 0.0
-
-            # Run all through num K_FOLDS cross-validation
-            for train, test in kf.split(x_features):
-                x_train_mat, x_test_mat = x_features[train], x_features[test]
-                y_train_mat, y_test_mat = y_train[train], y_train[test]
-
-                coeffs = train_model(x_train_mat, y_train_mat)
-
-                cross_valid_score += calculate_validation_error(coeffs, x_test_mat, y_test_mat)
-
-            scores[feature_name] = cross_valid_score / K_FOLDS
-
-        # Remove feature and append to selected set
-        best_feature = min(scores, key=scores.get)
         print(f"For k={k}, the best feature was: {best_feature}")
-        print(f"The cross-validation errors were: {scores}")
+        print(f"The cross-validation errors were: {cv_scores}")
+
+        # Remove best feature and append to selected set
         selected_features.append(best_feature)
         del remaining_features[best_feature]
 
@@ -103,6 +138,15 @@ def main():
 
         valid_error = calculate_validation_error(coeffs, x_test_mat, y_test)
         print(f"The selected subset test error was: {valid_error}")
+
+        # Do basis expansion
+        # Model 1: Polynomial model of degree 2
+        poly_features, poly_model = create_polynomial_regression_model(2, x_train_mat, y_train)
+        x_test_mat = poly_features.fit_transform(x_test_mat)
+        coeffs = poly_model.coef_
+
+        valid_error = calculate_validation_error(coeffs, x_test_mat, y_test)
+        print(f"The selected subset polynomial model test error was: {valid_error}")
         print()
 
 
