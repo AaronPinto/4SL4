@@ -8,6 +8,7 @@ numpy = "*"
 scikit-learn = "*"
 matplotlib = "==3.5.3"
 seaborn = "*"
+pandas = "*"
 
 [dev-packages]
 
