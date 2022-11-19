@@ -4,9 +4,8 @@ from matplotlib import pyplot as plt
 from scipy.special import expit
 from sklearn.datasets import load_breast_cancer
 from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import PrecisionRecallDisplay, f1_score, \
-    mean_absolute_error, \
-    precision_recall_curve, precision_score, recall_score
+from sklearn.metrics import PrecisionRecallDisplay, f1_score, mean_absolute_error, precision_recall_curve, \
+    precision_score, recall_score
 from sklearn.model_selection import KFold, cross_val_score, train_test_split
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.preprocessing import StandardScaler
